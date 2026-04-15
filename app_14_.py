@@ -93,17 +93,18 @@ def scrape_chambre():
 def scrape_sgg():
     base = "https://www.sgg.gov.ma"
     nouveaux = 0; conn = sqlite3.connect(DB_PATH); c = conn.cursor()
-    mots_cibles = ["projet de loi","avant-projet","avant projet","loi organique","dahir","décret","decret"]
+    mots_cibles = ["projet de loi","avant-projet","avant projet","loi organique"]
     try:
         resp = requests.get(f"{base}/Legislation.aspx", headers=HEADERS, timeout=15); resp.encoding = "utf-8"
         soup = BeautifulSoup(resp.text, "html.parser")
         for a in soup.find_all('a', href=True):
             titre = a.get_text(strip=True); href = a.get('href','')
-            if len(titre) < 10: continue
+            if len(titre) < 15: continue
             t = titre.lower()
-            if not (any(m in t for m in mots_cibles) or '.pdf' in href.lower()): continue
+            if not any(m in t for m in mots_cibles): continue
+            if any(x in t for x in ["accueil","contact","qui sommes","recherche","mentions"]): continue
             url_item = href if href.startswith('http') else base + "/" + href.lstrip("/")
-            if "avant-projet" in t or "avant projet" in t: statut = "Avant-projet de loi"
+            if "avant-projet" in t: statut = "Avant-projet de loi"
             elif "projet de loi" in t: statut = "Projet de loi"
             elif "loi organique" in t: statut = "Loi organique"
             else: statut = "Texte législatif"
