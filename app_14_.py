@@ -353,8 +353,6 @@ def dashboard():
         alertes_legal=ALERTES_LEGAL, alertes_regl=ALERTES_REGL, alertes_cyber=ALERTES_CYBER,
         last_update=datetime.now().strftime("%d/%m/%Y %H:%M"))
 
-@app.route("/api/scrape")
-import threading
 
 @app.route("/api/scrape")
 def api_scrape():
