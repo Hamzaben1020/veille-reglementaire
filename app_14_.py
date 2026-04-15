@@ -353,32 +353,35 @@ def dashboard():
         last_update=datetime.now().strftime("%d/%m/%Y %H:%M"))
 
 @app.route("/api/scrape")
+import threading
+
+@app.route("/api/scrape")
 def api_scrape():
-    try: n1=scrape_chambre()
-    except: n1=0
-    try: n2=scrape_sgg()
-    except: n2=0
-    try: n3=scrape_bo()
-    except: n3=0
-    try: n4=scrape_bam()
-    except: n4=0
-    try: n5=scrape_concurrence()
-    except: n5=0
-    try: n6=scrape_office_changes()
-    except: n6=0
-    try: n7=scrape_dgssi()
-    except: n7=0
-    try: n8=scrape_cndp()
-    except: n8=0
-    try: n9=scrape_anrt()
-    except: n9=0
-    total = n1+n2+n3+n4+n5+n6+n7+n8+n9
-    conn=sqlite3.connect(DB_PATH); c=conn.cursor()
-    eleves = c.execute("SELECT COUNT(*) FROM items WHERE alerte_niveau='eleve'").fetchone()[0]
-    conn.close()
-    return jsonify({"status":"ok","nouveaux":total,
-        "detail":{"chambre":n1,"sgg":n2,"bo":n3,"bam":n4,"concurrence":n5,"office_changes":n6,"dgssi":n7,"cndp":n8,"anrt":n9},
-        "alertes_elevees":eleves})
+    def run_scrape():
+        try: scrape_chambre()
+        except: pass
+        try: scrape_sgg()
+        except: pass
+        try: scrape_bo()
+        except: pass
+        try: scrape_bam()
+        except: pass
+        try: scrape_concurrence()
+        except: pass
+        try: scrape_office_changes()
+        except: pass
+        try: scrape_dgssi()
+        except: pass
+        try: scrape_cndp()
+        except: pass
+        try: scrape_anrt()
+        except: pass
+    
+    thread = threading.Thread(target=run_scrape)
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({"status":"ok","message":"Scraping lancé en arrière-plan, actualise la page dans 2 minutes"})
 @app.route("/api/demo")
 def api_demo():
     conn=sqlite3.connect(DB_PATH); c=conn.cursor()
