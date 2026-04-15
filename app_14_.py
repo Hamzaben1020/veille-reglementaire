@@ -5,6 +5,7 @@ import sqlite3
 import re
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
+import threading
 
 app = Flask(__name__)
 DB_PATH = "veille.db"
