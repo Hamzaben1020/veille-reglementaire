@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import sqlite3
 import re
 from datetime import datetime, timedelta
+from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 DB_PATH = "veille.db"
@@ -678,4 +679,10 @@ if __name__ == "__main__":
     print("\n✅  Base prête : veille.db")
     print("🚀  http://localhost:5000")
     print("📦  Données test : http://localhost:5000/api/demo\n")
+    scheduler = BackgroundScheduler()
+scheduler.add_job(lambda: (scrape_chambre(), scrape_sgg(), scrape_bo(),
+    scrape_bam(), scrape_concurrence(), scrape_office_changes(),
+    scrape_dgssi(), scrape_cndp(), scrape_anrt()),
+    'cron', hour=8, minute=0)
+scheduler.start()
     app.run(debug=True, port=5000)
