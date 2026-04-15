@@ -354,9 +354,24 @@ def dashboard():
 
 @app.route("/api/scrape")
 def api_scrape():
-    n1=scrape_chambre(); n2=scrape_s
-    n4=scrape_bam(); n5=scrape_concurrence(); n6=scrape_office_changes()
-    n7=scrape_dgssi(); n8=scrape_cndp(); n9=scrape_anrt()
+    try: n1=scrape_chambre()
+    except: n1=0
+    try: n2=scrape_sgg()
+    except: n2=0
+    try: n3=scrape_bo()
+    except: n3=0
+    try: n4=scrape_bam()
+    except: n4=0
+    try: n5=scrape_concurrence()
+    except: n5=0
+    try: n6=scrape_office_changes()
+    except: n6=0
+    try: n7=scrape_dgssi()
+    except: n7=0
+    try: n8=scrape_cndp()
+    except: n8=0
+    try: n9=scrape_anrt()
+    except: n9=0
     total = n1+n2+n3+n4+n5+n6+n7+n8+n9
     conn=sqlite3.connect(DB_PATH); c=conn.cursor()
     eleves = c.execute("SELECT COUNT(*) FROM items WHERE alerte_niveau='eleve'").fetchone()[0]
@@ -364,7 +379,6 @@ def api_scrape():
     return jsonify({"status":"ok","nouveaux":total,
         "detail":{"chambre":n1,"sgg":n2,"bo":n3,"bam":n4,"concurrence":n5,"office_changes":n6,"dgssi":n7,"cndp":n8,"anrt":n9},
         "alertes_elevees":eleves})
-
 @app.route("/api/demo")
 def api_demo():
     conn=sqlite3.connect(DB_PATH); c=conn.cursor()
