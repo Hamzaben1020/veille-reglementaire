@@ -674,15 +674,12 @@ function showToast(msg){const t=document.getElementById('toast');t.textContent=m
 </body>
 </html>"""
 
-if __name__ == "__main__":
-    init_db()
-    print("\n✅  Base prête : veille.db")
-    print("🚀  http://localhost:5000")
-    print("📦  Données test : http://localhost:5000/api/demo\n")
-    scheduler = BackgroundScheduler()
+scheduler = BackgroundScheduler()
 scheduler.add_job(lambda: (scrape_chambre(), scrape_sgg(), scrape_bo(),
     scrape_bam(), scrape_concurrence(), scrape_office_changes(),
     scrape_dgssi(), scrape_cndp(), scrape_anrt()),
     'cron', hour=8, minute=0)
 scheduler.start()
+
+if __name__ == "__main__":
     app.run(debug=True, port=5000)
