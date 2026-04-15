@@ -696,6 +696,13 @@ scheduler.add_job(lambda: (scrape_chambre(), scrape_sgg(), scrape_bo(),
     scrape_dgssi(), scrape_cndp(), scrape_anrt()),
     'cron', hour=8, minute=0)
 scheduler.start()
-
+@app.route("/api/reset")
+def api_reset():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM items")
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok", "message": "Base vidée"})
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
