@@ -353,8 +353,8 @@ def dashboard():
         last_update=datetime.now().strftime("%d/%m/%Y %H:%M"))
 
 @app.route("/api/scrape")
-def api_scrape():
-    n1=scrape_chambre(); n2=scrape_sgg(); n3=scrape_bo()
+    def api_scrape():
+    n1=scrape_chambre(); n2=scrape_s
     n4=scrape_bam(); n5=scrape_concurrence(); n6=scrape_office_changes()
     n7=scrape_dgssi(); n8=scrape_cndp(); n9=scrape_anrt()
     total = n1+n2+n3+n4+n5+n6+n7+n8+n9
