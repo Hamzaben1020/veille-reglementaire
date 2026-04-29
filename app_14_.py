@@ -5,7 +5,6 @@ import sqlite3
 import re
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
-import threading
 
 app = Flask(__name__)
 DB_PATH = "veille.db"
@@ -26,7 +25,12 @@ ALERTES_CYBER = {
     "faible": {"label": "FAIBLE", "emoji": "🟡", "mots": ["numérique","digital","informatique","réseau"]}
 }
 
-HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8"
+}
+TIMEOUT = 30  # Augmenté de 15 à 30 secondes
 
 def detecter_alerte(texte, alertes):
     t = texte.lower()
@@ -70,7 +74,7 @@ def scrape_chambre():
     titres_exclus = {"projet de loi organique","proposition de loi organique","projet de décret-loi","proposition de loi","projet de loi","recherche dans l'archive","textes finalisés"}
     for src in urls:
         try:
-            resp = requests.get(src["url"], headers=HEADERS, timeout=15); resp.encoding = "utf-8"
+            resp = requests.get(src["url"], headers=HEADERS, timeout=TIMEOUT); resp.encoding = "utf-8"
             soup = BeautifulSoup(resp.text, "html.parser")
             for a in soup.find_all('a', href=True):
                 titre_raw = a.get_text(strip=True); href = a.get('href','')
@@ -84,7 +88,7 @@ def scrape_chambre():
                 if not re.search(r'N[°º]\s*\d', titre): continue
                 url_item = href if href.startswith('http') else base + href
                 if save_item(c, titre, url_item, src["statut"], "chambre", "Chambre des Représentants", "legal", ALERTES_LEGAL, datetime.now().strftime("%d/%m/%Y")): nouveaux += 1
-        except Exception as e: print(f"Erreur Chambre: {e}")
+        except Exception as e: print(f"Erreur Chambre ({src['url']}): {e}")
     limite = (datetime.now() - timedelta(weeks=4)).strftime("%Y-%m-%d")
     c.execute("DELETE FROM items WHERE source_id='chambre' AND date_scrape < ?", (limite,))
     conn.commit(); conn.close(); return nouveaux
@@ -95,7 +99,7 @@ def scrape_sgg():
     nouveaux = 0; conn = sqlite3.connect(DB_PATH); c = conn.cursor()
     mots_cibles = ["projet de loi","avant-projet","avant projet","loi organique"]
     try:
-        resp = requests.get(f"{base}/Legislation.aspx", headers=HEADERS, timeout=15); resp.encoding = "utf-8"
+        resp = requests.get(f"{base}/Legislation.aspx", headers=HEADERS, timeout=TIMEOUT); resp.encoding = "utf-8"
         soup = BeautifulSoup(resp.text, "html.parser")
         for a in soup.find_all('a', href=True):
             titre = a.get_text(strip=True); href = a.get('href','')
@@ -118,7 +122,7 @@ def scrape_bo():
     nouveaux = 0; conn = sqlite3.connect(DB_PATH); c = conn.cursor()
     mots_paiement = ["paiement","monétique","monetique","bancaire","crédit","bank","financier","dahir","décret"]
     try:
-        resp = requests.get(f"{base}/fr/derniers-bulletins", headers=HEADERS, timeout=15); resp.encoding = "utf-8"
+        resp = requests.get(f"{base}/fr/derniers-bulletins", headers=HEADERS, timeout=TIMEOUT); resp.encoding = "utf-8"
         soup = BeautifulSoup(resp.text, "html.parser")
         for a in soup.find_all('a', href=True):
             titre = a.get_text(strip=True); href = a.get('href','')
@@ -136,7 +140,7 @@ def scrape_bam():
     nouveaux = 0; conn = sqlite3.connect(DB_PATH); c = conn.cursor()
     mots_doc = ["circulaire","lettre circulaire","décision réglementaire","décision reglementaire","décision règlementaire","directive","instruction","note de service","dahir"]
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=15); resp.encoding = "utf-8"
+        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT); resp.encoding = "utf-8"
         soup = BeautifulSoup(resp.text, "html.parser")
         seen = set()
         for a in soup.find_all('a', href=True):
@@ -166,17 +170,13 @@ def scrape_concurrence():
     ]
     mots_paiement = ["paiement","monétique","monetique","interchange","cmi","visa","mastercard","acquiring","acquéreur","établissement de paiement","switch","swam","hps","banque","bancaire","fintech","wallet","mobile"]
     nouveaux = 0; conn = sqlite3.connect(DB_PATH); c = conn.cursor()
-    limite_date = datetime.now() - timedelta(weeks=8)
 
     for src in urls:
         try:
-            resp = requests.get(src["url"], headers=HEADERS, timeout=15); resp.encoding = "utf-8"
+            resp = requests.get(src["url"], headers=HEADERS, timeout=TIMEOUT); resp.encoding = "utf-8"
             soup = BeautifulSoup(resp.text, "html.parser")
-
-            # WordPress : articles h2/h3 avec liens
             articles = soup.find_all(['h2','h3'], class_=lambda x: x and ('entry-title' in x or 'post-title' in x))
-            if not articles:
-                articles = soup.find_all(['h2','h3'])
+            if not articles: articles = soup.find_all(['h2','h3'])
 
             for h in articles:
                 a = h.find('a', href=True)
@@ -185,15 +185,12 @@ def scrape_concurrence():
                 href = a.get('href','')
                 if len(titre) < 15: continue
 
-                # Chercher la date proche de l'article
                 date_pub = ""
                 parent = h.parent
                 if parent:
                     date_el = parent.find(class_=lambda x: x and 'date' in str(x).lower())
-                    if date_el:
-                        date_pub = date_el.get_text(strip=True)[:20]
+                    if date_el: date_pub = date_el.get_text(strip=True)[:20]
 
-                # Chercher lien PDF dans le parent
                 url_final = href
                 if parent:
                     pdf_link = parent.find('a', href=lambda x: x and '.pdf' in x.lower())
@@ -205,17 +202,11 @@ def scrape_concurrence():
                 else:
                     statut_item = src["statut"]
 
-                # Filtrer : garder tout sauf les très génériques si pas de mot paiement
-                t = titre.lower()
-                est_pertinent = any(m in t for m in mots_paiement)
-
-                # Sauvegarder tous les items (filtrés par alerte dans detecter_alerte)
                 if save_item(c, titre, url_final, statut_item, "concurrence", "Conseil de la Concurrence", "reglementaire", ALERTES_REGL, date_pub):
                     nouveaux += 1
 
-        except Exception as e: print(f"Erreur Concurrence: {e}")
+        except Exception as e: print(f"Erreur Concurrence ({src['url']}): {e}")
 
-    # Purger > 8 semaines
     limite_str = (datetime.now() - timedelta(weeks=8)).strftime("%Y-%m-%d")
     c.execute("DELETE FROM items WHERE source_id='concurrence' AND date_scrape < ?", (limite_str,))
     conn.commit(); conn.close(); return nouveaux
@@ -231,7 +222,7 @@ def scrape_office_changes():
     mots_doc = ["circulaire","instruction","note","arrêté","décision","change","paiement","transfert","virement","devise"]
     for url in urls:
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=15); resp.encoding = "utf-8"
+            resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT); resp.encoding = "utf-8"
             soup = BeautifulSoup(resp.text, "html.parser")
             for a in soup.find_all('a', href=True):
                 titre = a.get_text(strip=True); href = a.get('href','')
@@ -245,7 +236,7 @@ def scrape_office_changes():
                 elif "arrêté" in t: statut = "Arrêté"
                 else: statut = "Document OC"
                 if save_item(c, titre, url_item, statut, "office_changes", "Office des Changes", "reglementaire", ALERTES_REGL): nouveaux += 1
-        except Exception as e: print(f"Erreur OC: {e}")
+        except Exception as e: print(f"Erreur OC ({url}): {e}")
     conn.commit(); conn.close(); return nouveaux
 
 # ── CNDP ──────────────────────────────────────────────────────────────────────
@@ -255,24 +246,21 @@ def scrape_cndp():
         {"url":"https://www.cndp.ma/actualites/","statut":"Actualité CNDP"},
     ]
     nouveaux = 0; conn = sqlite3.connect(DB_PATH); c = conn.cursor()
-    limite_date = datetime.now() - timedelta(weeks=12)
 
     for src in urls:
         try:
-            resp = requests.get(src["url"], headers=HEADERS, timeout=15); resp.encoding = "utf-8"
+            resp = requests.get(src["url"], headers=HEADERS, timeout=TIMEOUT); resp.encoding = "utf-8"
             soup = BeautifulSoup(resp.text, "html.parser")
             for a in soup.find_all('a', href=True):
                 titre = a.get_text(strip=True); href = a.get('href','')
                 if len(titre) < 15: continue
                 t = titre.lower()
-                # Exclure menus de navigation
                 if any(x in t for x in ["accueil","contact","qui sommes","mention","politique","cookie"]): continue
                 url_item = href if href.startswith('http') else "https://www.cndp.ma" + href
-                # Détecter si c'est un PDF
                 statut = src["statut"]
                 if '.pdf' in href.lower(): statut += " (PDF)"
                 if save_item(c, titre, url_item, statut, "cndp", "CNDP", "cyber", ALERTES_CYBER): nouveaux += 1
-        except Exception as e: print(f"Erreur CNDP: {e}")
+        except Exception as e: print(f"Erreur CNDP ({src['url']}): {e}")
 
     conn.commit(); conn.close(); return nouveaux
 
@@ -282,7 +270,7 @@ def scrape_dgssi():
     nouveaux = 0; conn = sqlite3.connect(DB_PATH); c = conn.cursor()
     mots_doc = ["arrêté","arrete","circulaire","loi","décret","decret","dahir","instruction","directive","ordonnance"]
     try:
-        resp = requests.get(f"{base}/fr/textes-legislatifs-et-reglementaires/", headers=HEADERS, timeout=15); resp.encoding = "utf-8"
+        resp = requests.get(f"{base}/fr/textes-legislatifs-et-reglementaires/", headers=HEADERS, timeout=TIMEOUT); resp.encoding = "utf-8"
         soup = BeautifulSoup(resp.text, "html.parser")
         for a in soup.find_all('a', href=True):
             titre = a.get_text(strip=True); href = a.get('href','')
@@ -309,7 +297,7 @@ def scrape_anrt():
     mots_doc = ["décision","arrêté","circulaire","directive","licence","autorisation","interopérabilité","paiement","mobile","fintech"]
     for src in urls:
         try:
-            resp = requests.get(src["url"], headers=HEADERS, timeout=15); resp.encoding = "utf-8"
+            resp = requests.get(src["url"], headers=HEADERS, timeout=TIMEOUT); resp.encoding = "utf-8"
             soup = BeautifulSoup(resp.text, "html.parser")
             for a in soup.find_all('a', href=True):
                 titre = a.get_text(strip=True); href = a.get('href','')
@@ -321,7 +309,7 @@ def scrape_anrt():
                 statut = src["statut"]
                 if '.pdf' in href.lower(): statut += " (PDF)"
                 if save_item(c, titre, url_item, statut, "anrt", "ANRT", "cyber", ALERTES_CYBER): nouveaux += 1
-        except Exception as e: print(f"Erreur ANRT: {e}")
+        except Exception as e: print(f"Erreur ANRT ({src['url']}): {e}")
     conn.commit(); conn.close(); return nouveaux
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -358,18 +346,23 @@ def dashboard():
 @app.route("/api/scrape")
 def api_scrape():
     nouveaux_total = 0
-    try:
-        nouveaux_total += scrape_chambre()
-        nouveaux_total += scrape_sgg()
-        nouveaux_total += scrape_bo()
-        nouveaux_total += scrape_bam()
-        nouveaux_total += scrape_concurrence()
-        nouveaux_total += scrape_office_changes()
-        nouveaux_total += scrape_dgssi()
-        nouveaux_total += scrape_cndp()
-        nouveaux_total += scrape_anrt()
-    except Exception as e:
-        print(f"Erreur scraping: {e}")
+    
+    def safe_scrape(func, name):
+        try:
+            return func()
+        except Exception as e:
+            print(f"❌ Erreur {name}: {e}")
+            return 0
+    
+    nouveaux_total += safe_scrape(scrape_chambre, "Chambre")
+    nouveaux_total += safe_scrape(scrape_sgg, "SGG")
+    nouveaux_total += safe_scrape(scrape_bo, "BO")
+    nouveaux_total += safe_scrape(scrape_bam, "BAM")
+    nouveaux_total += safe_scrape(scrape_concurrence, "Concurrence")
+    nouveaux_total += safe_scrape(scrape_office_changes, "OC")
+    nouveaux_total += safe_scrape(scrape_dgssi, "DGSSI")
+    nouveaux_total += safe_scrape(scrape_cndp, "CNDP")
+    nouveaux_total += safe_scrape(scrape_anrt, "ANRT")
     
     # Compter les alertes élevées
     conn = sqlite3.connect(DB_PATH)
@@ -383,6 +376,7 @@ def api_scrape():
         "alertes_elevees": alertes_elevees,
         "message": f"{nouveaux_total} nouveaux documents scrappés"
     })
+
 @app.route("/api/demo")
 def api_demo():
     conn=sqlite3.connect(DB_PATH); c=conn.cursor()
@@ -489,7 +483,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
 .extern{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:.95rem 1.1rem;display:flex;align-items:center;gap:1rem;margin-bottom:.6rem}
 .extern.c{border-left:3px solid var(--cyan)}.extern.v{border-left:3px solid var(--violet)}
 .ebd{flex:1}.etitle{font-size:.85rem;font-weight:700;color:var(--text);margin-bottom:.2rem}.edesc{font-size:.74rem;color:var(--text2);line-height:1.5}
-.ebtn{background:var(--surface2);color:var(--cyan);border:1px solid rgba(0,188,212,.3);padding:6px 13px;border-radius:6px;font-size:.7rem;font-weight:700;text-decoration:none;white-space:nowrap;transition:all .15s;font-family:'Outfit',sans-serif}
+.ebtn{background:var(--surface2);color:var(--cyan);border:1px solid rgba(0,188,212,.3);padding:6px 13px;border-radius:6px;font-size:.7rem;font-weight:700;text-decoration:none;whitespace:nowrap;transition:all .15s;font-family:'Outfit',sans-serif}
 .ebtn:hover{background:var(--cyan-light);border-color:var(--cyan)}
 .toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--surface);color:var(--text);padding:.8rem 1.2rem;border-radius:10px;border:1px solid var(--border);border-top:2px solid var(--cyan);font-size:.78rem;font-weight:500;box-shadow:0 8px 24px rgba(0,0,0,.12);transform:translateY(70px);opacity:0;transition:all .3s cubic-bezier(.175,.885,.32,1.275);z-index:999;max-width:280px}
 .toast.show{transform:translateY(0);opacity:1}
@@ -696,8 +690,9 @@ scheduler = BackgroundScheduler()
 scheduler.add_job(lambda: (scrape_chambre(), scrape_sgg(), scrape_bo(),
     scrape_bam(), scrape_concurrence(), scrape_office_changes(),
     scrape_dgssi(), scrape_cndp(), scrape_anrt()),
-    'cron', hour=8, minute=0)
+    'interval', hours=6)  # Scraping toutes les 6 heures
 scheduler.start()
+
 @app.route("/api/reset")
 def api_reset():
     conn = sqlite3.connect(DB_PATH)
@@ -706,5 +701,7 @@ def api_reset():
     conn.commit()
     conn.close()
     return jsonify({"status": "ok", "message": "Base vidée"})
+
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    init_db()
+    app.run(debug=False, host='0.0.0.0', port=5000)
