@@ -357,31 +357,32 @@ def dashboard():
 
 @app.route("/api/scrape")
 def api_scrape():
-    def run_scrape():
-        try: scrape_chambre()
-        except: pass
-        try: scrape_sgg()
-        except: pass
-        try: scrape_bo()
-        except: pass
-        try: scrape_bam()
-        except: pass
-        try: scrape_concurrence()
-        except: pass
-        try: scrape_office_changes()
-        except: pass
-        try: scrape_dgssi()
-        except: pass
-        try: scrape_cndp()
-        except: pass
-        try: scrape_anrt()
-        except: pass
+    nouveaux_total = 0
+    try:
+        nouveaux_total += scrape_chambre()
+        nouveaux_total += scrape_sgg()
+        nouveaux_total += scrape_bo()
+        nouveaux_total += scrape_bam()
+        nouveaux_total += scrape_concurrence()
+        nouveaux_total += scrape_office_changes()
+        nouveaux_total += scrape_dgssi()
+        nouveaux_total += scrape_cndp()
+        nouveaux_total += scrape_anrt()
+    except Exception as e:
+        print(f"Erreur scraping: {e}")
     
-    thread = threading.Thread(target=run_scrape)
-    thread.daemon = True
-    thread.start()
+    # Compter les alertes élevées
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    alertes_elevees = c.execute("SELECT COUNT(*) FROM items WHERE alerte_niveau='eleve'").fetchone()[0]
+    conn.close()
     
-    return jsonify({"status":"ok","message":"Scraping lancé en arrière-plan, actualise la page dans 2 minutes"})
+    return jsonify({
+        "status": "ok",
+        "nouveaux": nouveaux_total,
+        "alertes_elevees": alertes_elevees,
+        "message": f"{nouveaux_total} nouveaux documents scrappés"
+    })
 @app.route("/api/demo")
 def api_demo():
     conn=sqlite3.connect(DB_PATH); c=conn.cursor()
